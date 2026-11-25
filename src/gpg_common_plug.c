@@ -200,6 +200,7 @@ static int gpg_common_valid_hash_algorithm(int hash_algorithm, int spec, int isC
 		switch (hash_algorithm) {
 			case HASH_SHA1: return 1;
 			case HASH_MD5: return 1;
+			case HASH_RIPEMD160: return 1;
 			case 0: return 1; // http://www.ietf.org/rfc/rfc1991.txt
 		}
 	}
@@ -455,6 +456,23 @@ static void S2KSaltedMD5Generator(char *password, unsigned char *key, int length
 		MD5_Update(&ctx, gpg_common_cur_salt->salt, SALT_LENGTH);
 		MD5_Update(&ctx, password, strlen(password));
 		MD5_Final(key + (i * MD5_DIGEST_LENGTH), &ctx);
+	}
+}
+
+static void S2KSaltedRIPEMD160Generator(char *password, unsigned char *key, int length)
+{
+	RIPEMD160_CTX ctx;
+	uint32_t numHashes = (length + RIPEMD160_DIGEST_LENGTH - 1) / RIPEMD160_DIGEST_LENGTH;
+	int i, j;
+
+	for (i = 0; i < numHashes; i++) {
+		RIPEMD160_Init(&ctx);
+		for (j = 0; j < i; j++) {
+			RIPEMD160_Update(&ctx, "\0", 1);
+		}
+		RIPEMD160_Update(&ctx, gpg_common_cur_salt->salt, SALT_LENGTH);
+		RIPEMD160_Update(&ctx, password, strlen(password));
+		RIPEMD160_Final(key + (i * RIPEMD160_DIGEST_LENGTH), &ctx);
 	}
 }
 
@@ -1016,6 +1034,9 @@ void *gpg_common_get_salt(char *ciphertext)
 					case HASH_MD5:
 						psalt->s2kfun = S2KSaltedMD5Generator;
 						break;
+					case HASH_RIPEMD160:
+					        psalt->s2kfun = S2KSaltedRIPEMD160Generator;
+					        break;
 					default:
 						// WTF? (see gpg_common_valid_hash_algorithm() function)
 						psalt->s2kfun = S2KSaltedSHA1Generator;
